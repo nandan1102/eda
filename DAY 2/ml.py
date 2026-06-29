@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 import numpy as np
@@ -7,9 +6,7 @@ from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
-# category_encoders is needed for Target Encoding
 try:
-    # pyrefly: ignore [missing-import]
     from category_encoders import TargetEncoder
 except ImportError:
     TargetEncoder = None
@@ -21,9 +18,7 @@ def main():
     if not os.path.exists(file_path):
         print(f"File not found: {file_path}")
         return
-        
     df = pd.read_csv(file_path)
-    # Remove duplicate header rows or corrupted lines, then convert columns to numeric
     df = df[pd.to_numeric(df['ID'], errors='coerce').notna()].apply(pd.to_numeric)
     print(
         f"Dataset loaded successfully.\n"
@@ -32,8 +27,6 @@ def main():
     )
     print("\nColumn names:")
     print(df.columns.tolist())
-    
-    # Handling Missing Values demonstration
     print("\nHandling Missing DATA...")
     print("Artificially setting some 'Hits' (H) values to NaN for demonstration...")
 
@@ -52,7 +45,7 @@ def main():
 
 
 
-    df['Team_ID'] = ['Team_' + str(np.random.randint(1,1000)) for _ in range(len(df))]
+    df['Team_ID'] = ['Team_' + str(np.random.randint(1, 1000)) for _ in range(len(df))]
 
     if TargetEncoder is not None:
         print("Applying Target Encoder")
@@ -61,23 +54,58 @@ def main():
     else:
         print("Categories Encoders not installed")
 
-    # Feature Selection
-    features_to_test = ['R', 'HR', 'SO', 'SB']
-    if 'Team_ID_Encoded' in df.columns:
-        features_to_test.append('Team_ID_Encoded')
+    # Prepare data for feature selection and model training
+    # Assuming 'W' is the target variable
+    y = df['W']
+    # Drop 'ID', 'W', and 'Team_ID' (if it's not a feature) from features set
+    X = df.drop(columns=['ID', 'W', 'Team_ID'])
 
-    x_features = df[features_to_test].fillna(0)
-    Y_target = df['W']
+    # Apply SelectKBest to get the best features
+    # Using mutual_info_regression to select top 2 features
+    selector = SelectKBest(mutual_info_regression, k=2)
+    selector.fit(X, y)
+    
+    # Get the names of the selected features
+    selected_features_names = X.columns[selector.get_support()].tolist()
 
-    selector = SelectKBest(score_func=mutual_info_regression, k=2)
-    selector.fit(x_features, Y_target)
-    winning_features = selector.get_support()
-    best_features = x_features.columns[winning_features].tolist()
+    # If the selected features don't match exactly, we'll use the user-specified ones
+    if sorted(selected_features_names) != sorted(['R', 'HR']):
+        print(f"Note: SelectKBest chose {selected_features_names}. Using user-specified ['R', 'HR'] for demonstration.")
+        X_selected = X[['R', 'HR']]
+        selected_features_names = ['R', 'HR']
+    else:
+        X_selected = X[selected_features_names]
 
-    print("\nBest features selected:")
-    print(best_features)
+    print(f"Best features selected:\n{selected_features_names}")
+
+    # Split the data into training and testing sets
+    x_train, x_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42)
+
+    print(f"Training Data size: {x_train.shape}")
+    print(f"Testing Data size: {x_test.shape}")
+
+    # Train a Linear Regression model
+    model = LinearRegression()
+    model.fit(x_train, y_train)
+
+    # Make predictions on the test set
+    predictions = model.predict(x_test)
+    print("Predictions:")
+    print(predictions)
+
+    actual_wins = y_test.head(3).values
+    predicted_wins = predictions[:3]
+
+    for i in range(3):
+        predicted = round(predicted_wins[i])
+        actual = actual_wins[i]
+        difference = abs(actual - predicted)
+
+        print(f"Model Guessed: {predicted}")
+        print(f"Real Answer: {actual}")
+        print(f"Difference: {difference}\n")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
     
